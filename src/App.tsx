@@ -13,32 +13,40 @@ const idDecoration = rawIdDecoration as idDecorationData;
 
 const inputClassName = "bg-zinc-700 rounded-sm";
 
-type IngStateSetter = (value: ((prevState: Ingredient[]) => Ingredient[]) | Ingredient[]) => void
+type Ingredients = (Ingredient | string)[];
+type IngStateSetter = (value: ((prevState: Ingredients) => Ingredients) | Ingredients) => void
 
 export default function App() {
-    const [ingredients, setIngredients] = useState<Ingredient[]>(new Array(6).fill(null));
+    // const [hash, setHash] = useState<string>(window.location.hash);
+    const [ingredients, setIngredients] = useState<Ingredients>(parseIngredientsFromURL());
 
-    const ingredientInputs = createIngredientInputs(6, setIngredients);
     return (
         <>
+            {/*Hash: <input className={inputClassName}/>*/}
+            {/*<br/>*/}
+            {/*<br/>*/}
             <div className="p-1">
-                {ingredientInputs[0]}
-                {ingredientInputs[1]}
+                <IngredientInput index={0} setOutput={setIngredients}/>
+                <IngredientInput index={1} setOutput={setIngredients}/>
             </div>
             <div className="p-1">
-                {ingredientInputs[2]}
-                {ingredientInputs[3]}
+                <IngredientInput index={2} setOutput={setIngredients}/>
+                <IngredientInput index={3} setOutput={setIngredients}/>
             </div>
             <div className="p-1">
-                {ingredientInputs[4]}
-                {ingredientInputs[5]}
+                <IngredientInput index={4} setOutput={setIngredients}/>
+                <IngredientInput index={5} setOutput={setIngredients}/>
             </div>
             <br/>
             <div>
                 <table className="table-auto bg-neutral-700">
                     <thead className="thead-dark">
                     <tr>
-                        <th className="text-center"></th>
+                        <HeaderCell>Identification:</HeaderCell>
+                        <HeaderCell>Roll range:</HeaderCell>
+                        <HeaderCell>Selected roll cutoff:</HeaderCell>
+                        <HeaderCell>Chance roll is<br/>at or above:</HeaderCell>
+                        <HeaderCell>Chance roll<br/>exactly matches:</HeaderCell>
                     </tr>
                     </thead>
                     <RollTable ingredients={ingredients}/>
@@ -48,26 +56,33 @@ export default function App() {
     );
 }
 
-function createIngredientInputs(count: number, setOutput: IngStateSetter) {
-    const inputs = [];
-    for (let i = 0; i < count; i++) {
-        inputs.push(<><IngredientInput index={i} setOutput={setOutput}/></>);
-    }
-    return inputs;
+function parseIngredientsFromURL(): Ingredients {
+    // const ingredients: Ingredients = new Array(6).fill("") as Ingredients;
+    // const hash = window.location.hash;
+
+    return new Array(6).fill("") as Ingredients;
 }
+
+// function parseIngredientHash(hash): Ingredients {
+//     if (!hash || hash === "") return new Array(6).fill("") as Ingredients;
+//     atob(hash)
+// }
+
+// function HashInput({ingredients}) {
+//     // window.location.replace(`http://localhost:3000/${dynamic_value}`);
+//     const [hash, setHash] = useState(window.location.hash);
+//
+//     return <input onInput={() => console.log("a")}/>
+// }
 
 function IngredientInput(props: { index: number, setOutput: IngStateSetter }) {
     const {index, setOutput} = props;
-    return (
-        <span className="p-1">
-            Ing {index + 1}: <input className={inputClassName} onInput={e => {
-            const ingredient = getIngredient(e.currentTarget.value);
-            setOutput((prev) => prev
-                .map((prevIng, i) => (i === index) ? ingredient : prevIng));
-        }
-        }/>
-        </span>
-    );
+    return <span className="p-1">
+        Ing {index + 1}: <input className={inputClassName} onInput={e => {
+        const ingredient = getIngredient(e.currentTarget.value);
+        setOutput(prev => prev
+            .map((prevIng, i) => i === index ? ingredient : prevIng));
+    }}/></span>;
 }
 
 const touchings = [
@@ -91,14 +106,14 @@ type IdProbabilities = { [key: string]: RollSplit }
 
 type RollSplit = { [key: number]: number }
 
-function RollTable(props: { ingredients: Ingredient[] }) {
+function RollTable(props: { ingredients: Ingredients }) {
     const {ingredients} = props;
     // todo: sum effectiveness
     const effectivenessMods: number[] = new Array(6).fill(100);
 
     for (let i = 0; i < ingredients.length; i++) {
         const ingredient = ingredients[i];
-        if (ingredient == null) continue;
+        if (ingredient == null || typeof ingredient === "string") continue;
         const mods = ingredient.ingredientPositionModifiers;
         if (i % 2 === 1) effectivenessMods[i - 1] += mods.left;
         if (i % 2 === 0) effectivenessMods[i + 1] += mods.right;
@@ -114,7 +129,7 @@ function RollTable(props: { ingredients: Ingredient[] }) {
 
     for (let i = 0; i < ingredients.length; i++) {
         const ingredient = ingredients[i];
-        if (ingredient == null) continue;
+        if (ingredient == null || typeof ingredient === "string") continue;
         for (const idName in ingredient.identifications) {
             const rolls = idToProbability(ingredient.identifications[idName], effectivenessMods[i]);
             if (!idProbabilities[idName]) {
@@ -144,50 +159,46 @@ function ProbabilityRow(props: { idName: string, rolls: RollSplit }): JSX.Elemen
     // when minRoll or maxRoll change, minInput and maxInput need to reset
 
     const [min, setMin] = useState(minRoll);
-    const [max, setMax] = useState(maxRoll);
 
     const [minInput, inputMin] = useState<number>(minRoll);
-    const [maxInput, inputMax] = useState<number>(maxRoll);
 
     if (min !== minRoll) {
         setMin(minRoll);
         inputMin(minRoll);
     }
-    if (max !== maxRoll) {
-        setMax(maxRoll);
-        inputMax(maxRoll);
-    }
 
-    const sum = sumInRange(numericKeys, rolls, minInput, maxInput);
+    const sum = sumAbove(numericKeys, rolls, minInput);
 
     return <tr>
         <Cell>{idDecoration[idName].name}:</Cell>
-        <Cell>{minRoll}-{maxRoll}</Cell>
+        <Cell>{minRoll} to {maxRoll}</Cell>
         <Cell>
-            Min: <input className={inputClassName} type="number"
-                        min={min} max={Math.min(max, maxInput)} value={minInput}
-                        onInput={e => inputMin(parseInt(e.currentTarget.value))}/>
-        </Cell>
-        <Cell>
-            Max: <input className={inputClassName} type="number"
-                        min={Math.max(min, minInput)} max={max} value={maxInput}
-                        onInput={e => inputMax(parseInt(e.currentTarget.value))}/>
+             <input className={inputClassName} type="range"
+                        min={minRoll} max={maxRoll} value={minInput}
+                        onInput={e => inputMin(parseInt(e.currentTarget.value))}/> ({minInput}-{maxRoll})
         </Cell>
         <Cell>{Math.round(10 * 100 * sum / total) / 10}%</Cell>
+        <Cell>{Math.round(10 * 100 * rolls[minInput] / total) / 10}%</Cell>
     </tr>;
 }
 
 type ChildrenProp = { children: ReactNode }
 
+function HeaderCell({children}: ChildrenProp) {
+    return <th className="border border-gray-300 p-1 dark:border-gray-500 dark:text-gray-400">
+        {children}
+    </th>;
+}
+
 function Cell({children}: ChildrenProp) {
-    return <td className="text-left border border-gray-300 p-1 dark:border-gray-500 dark:text-gray-400">
+    return <td className="border border-gray-300 p-1 dark:border-gray-500 dark:text-gray-400">
         {children}
     </td>;
 }
 
-function sumInRange(numberKeys: number[], values: { [key: string]: number }, min: number, max: number): number {
+function sumAbove(numberKeys: number[], values: { [key: string]: number }, min: number): number {
     return numberKeys.reduce((total, value) =>
-        total + ((min <= value && value <= max) ? values[value] : 0), 0);
+        total + ((min <= value) ? values[value] : 0), 0);
 }
 
 function idToProbability(id: Identification, effectiveness: number): RollSplit {
@@ -199,16 +210,16 @@ function idToProbability(id: Identification, effectiveness: number): RollSplit {
     return probabilities;
 }
 
-function getIngredient(name: string): Ingredient | null {
-    if (!itemGroupData["ingredient"].includes(name)) return null;
+function getIngredient(name: string): Ingredient | string {
+    if (!itemGroupData["ingredient"].includes(name)) return "";
 
-    for (const item in itemData) {
+    for (const item in itemData)
         if (itemData[item]?.name === name) return itemData[item];
-    }
+
     throw new Error(`Could not find Ingredient "${name}" despite existing in the ingredient item group!`);
 }
 
-type Ingredient = null | {
+type Ingredient = {
     name: string,
     internalName: string,
     identifications: {
